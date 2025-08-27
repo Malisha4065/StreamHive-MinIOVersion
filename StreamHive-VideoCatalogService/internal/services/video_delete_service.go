@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,26 +13,28 @@ import (
 	"github.com/streamhive/video-catalog-api/internal/models"
 )
 
+type StorageClient interface {
+	DeleteBlob(ctx context.Context, bucket, blobPath string) error
+	DeleteBlobsWithPrefix(ctx context.Context, bucket, prefix string) error
+	BlobExists(ctx context.Context, bucket, blobPath string) (bool, error)
+}
+
 // VideoDeleteService handles video deletion including storage cleanup
 type VideoDeleteService struct {
-	db     *gorm.DB
-	logger *zap.SugaredLogger
-	azure  AzureStorageClient
+	db              *gorm.DB
+	logger          *zap.SugaredLogger
+	storage         StorageClient // Renamed from 'azure'
+	rawBucket       string
+	processedBucket string
 }
 
-// AzureStorageClient interface for Azure operations needed for deletion
-type AzureStorageClient interface {
-	DeleteBlob(ctx context.Context, blobPath string) error
-	DeleteBlobsWithPrefix(ctx context.Context, prefix string) error
-	BlobExists(ctx context.Context, blobPath string) (bool, error)
-}
-
-// NewVideoDeleteService creates a new video delete service
-func NewVideoDeleteService(db *gorm.DB, logger *zap.SugaredLogger, azure AzureStorageClient) *VideoDeleteService {
+func NewVideoDeleteService(db *gorm.DB, logger *zap.SugaredLogger, client StorageClient) *VideoDeleteService {
 	return &VideoDeleteService{
-		db:     db,
-		logger: logger,
-		azure:  azure,
+		db:              db,
+		logger:          logger,
+		storage:         client,
+		rawBucket:       os.Getenv("MINIO_RAW_BUCKET"),
+		processedBucket: os.Getenv("MINIO_PROCESSED_BUCKET"),
 	}
 }
 
@@ -53,92 +56,40 @@ func (s *VideoDeleteService) DeleteVideoCompletely(ctx context.Context, videoID 
 		"userID", video.UserID,
 		"title", video.Title)
 
-	// Collect all storage paths to delete
-	var pathsToDelete []string
-	var prefixesToDelete []string
-
-	// 1. Raw video file
+	// 1. Raw video file from the raw bucket
 	if video.RawVideoPath != "" {
-		pathsToDelete = append(pathsToDelete, video.RawVideoPath)
-		s.logger.Infow("Will delete raw video", "path", video.RawVideoPath)
-	}
-
-	// 2. HLS files (all renditions, segments, and master playlist)
-	if video.HLSMasterURL != "" {
-		hlsPrefix := s.extractHLSPrefix(video.HLSMasterURL, video.UserID, video.UploadID)
-		if hlsPrefix != "" {
-			prefixesToDelete = append(prefixesToDelete, hlsPrefix)
-			s.logger.Infow("Will delete HLS files", "prefix", hlsPrefix)
+		if err := s.storage.DeleteBlob(ctx, s.rawBucket, video.RawVideoPath); err != nil {
+			s.logger.Warnw("Failed to delete raw video file (continuing)", "error", err, "path", video.RawVideoPath)
+		} else {
+			s.logger.Infow("Deleted raw video", "path", video.RawVideoPath)
 		}
 	}
 
-	// 3. Thumbnail
+	// 2. HLS files from the processed bucket
+	hlsPrefix := fmt.Sprintf("hls/%s/%s/", video.UserID, video.UploadID)
+	if err := s.storage.DeleteBlobsWithPrefix(ctx, s.processedBucket, hlsPrefix); err != nil {
+		s.logger.Warnw("Failed to delete HLS files with prefix (continuing)", "error", err, "prefix", hlsPrefix)
+	} else {
+		s.logger.Infow("Deleted HLS files", "prefix", hlsPrefix)
+	}
+
+	// 3. Thumbnail from the processed bucket
 	thumbnailPath := fmt.Sprintf("thumbnails/%s/%s.jpg", video.UserID, video.UploadID)
-	pathsToDelete = append(pathsToDelete, thumbnailPath)
-	s.logger.Infow("Will delete thumbnail", "path", thumbnailPath)
-
-	// 4. Any other potential files (future-proofing)
-	otherPrefix := fmt.Sprintf("videos/%s/%s", video.UserID, video.UploadID)
-	prefixesToDelete = append(prefixesToDelete, otherPrefix)
-
-	// Delete from storage first (easier to retry if DB deletion fails)
-	deletedFiles := 0
-	deletedPrefixes := 0
-
-	// Delete individual files
-	for _, path := range pathsToDelete {
-		if err := s.deleteFileIfExists(ctx, path); err != nil {
-			s.logger.Warnw("Failed to delete file (continuing)", "error", err, "path", path)
-		} else {
-			deletedFiles++
-		}
+	if err := s.storage.DeleteBlob(ctx, s.processedBucket, thumbnailPath); err != nil {
+		s.logger.Warnw("Failed to delete thumbnail file (continuing)", "error", err, "path", thumbnailPath)
+	} else {
+		s.logger.Infow("Deleted thumbnail", "path", thumbnailPath)
 	}
 
-	// Delete by prefix (for HLS folders)
-	for _, prefix := range prefixesToDelete {
-		if err := s.azure.DeleteBlobsWithPrefix(ctx, prefix); err != nil {
-			s.logger.Warnw("Failed to delete files with prefix (continuing)", "error", err, "prefix", prefix)
-		} else {
-			deletedPrefixes++
-		}
-	}
+	s.logger.Infow("Storage cleanup completed", "videoID", videoID)
 
-	s.logger.Infow("Storage cleanup completed",
-		"deletedFiles", deletedFiles,
-		"deletedPrefixes", deletedPrefixes,
-		"videoID", videoID)
-
-	// Now delete from database (hard delete, not soft delete)
+	// --- Now delete from database ---
 	if err := s.db.Unscoped().Delete(&video).Error; err != nil {
 		s.logger.Errorw("Failed to delete video from database", "error", err, "videoID", videoID)
 		return fmt.Errorf("failed to delete video from database: %w", err)
 	}
 
-	s.logger.Infow("Video completely deleted",
-		"videoID", videoID,
-		"uploadID", video.UploadID,
-		"title", video.Title)
-
-	return nil
-}
-
-// deleteFileIfExists deletes a file if it exists, ignoring not-found errors
-func (s *VideoDeleteService) deleteFileIfExists(ctx context.Context, path string) error {
-	exists, err := s.azure.BlobExists(ctx, path)
-	if err != nil {
-		return fmt.Errorf("failed to check if file exists: %w", err)
-	}
-
-	if !exists {
-		s.logger.Debugw("File doesn't exist, skipping", "path", path)
-		return nil
-	}
-
-	if err := s.azure.DeleteBlob(ctx, path); err != nil {
-		return fmt.Errorf("failed to delete file: %w", err)
-	}
-
-	s.logger.Debugw("File deleted", "path", path)
+	s.logger.Infow("Video completely deleted", "videoID", videoID, "uploadID", video.UploadID)
 	return nil
 }
 

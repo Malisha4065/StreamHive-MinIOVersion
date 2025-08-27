@@ -726,6 +726,11 @@ spec:
             secretKeyRef:
               name: streamhive-secrets
               key: MINIO_PROCESSED_BUCKET
+        - name: MINIO_RAW_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: streamhive-secrets
+              key: MINIO_RAW_BUCKET
         resources:
           requests:
             memory: "128Mi"

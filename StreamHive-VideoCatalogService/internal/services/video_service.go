@@ -17,18 +17,41 @@ type VideoService struct {
 	deleteService *VideoDeleteService
 }
 
-// NewVideoService creates a new video service
 func NewVideoService(db *gorm.DB, logger *zap.SugaredLogger) *VideoService {
-	// Initialize Azure client for deletion operations
-	azureClient, err := NewAzureClientAdapterFromEnv()
+	// --- START: MODIFIED SECTION ---
+	// Initialize S3 client for deletion operations
+	storageClient, err := NewS3ClientAdapterFromEnv()
 	if err != nil {
-		logger.Warnw("Failed to initialize Azure client for video deletion", "error", err)
+		logger.Warnw("Failed to initialize S3 client for video deletion, file cleanup will be disabled", "error", err)
 		// Continue without deletion service - deletion will be database-only
 		return &VideoService{db: db, logger: logger, deleteService: nil}
 	}
 
-	deleteService := NewVideoDeleteService(db, logger, azureClient)
+	deleteService := NewVideoDeleteService(db, logger, storageClient)
+	// --- END: MODIFIED SECTION ---
 	return &VideoService{db: db, logger: logger, deleteService: deleteService}
+}
+
+// DeleteVideo completely removes a video and all associated files
+func (s *VideoService) DeleteVideo(id uint) error {
+	// Use the delete service if available for complete cleanup
+	if s.deleteService != nil {
+		ctx := context.Background()
+		if err := s.deleteService.DeleteVideoCompletely(ctx, id); err != nil {
+			s.logger.Errorw("Failed to delete video completely", "error", err, "videoID", id)
+			return err
+		}
+		return nil
+	}
+
+	// Fallback to database-only deletion if S3 client unavailable
+	s.logger.Warnw("Storage client not available - performing database-only deletion", "videoID", id)
+	if err := s.db.Unscoped().Delete(&models.Video{}, id).Error; err != nil {
+		s.logger.Errorw("Failed to delete video from database", "error", err, "videoID", id)
+		return fmt.Errorf("failed to delete video: %w", err)
+	}
+	s.logger.Infow("Video deleted from database only", "videoID", id)
+	return nil
 }
 
 // CreateVideo creates a new video record (manual creation path)
@@ -116,27 +139,7 @@ func (s *VideoService) UpdateVideo(id uint, req *models.VideoUpdateRequest) (*mo
 	return video, nil
 }
 
-// DeleteVideo completely removes a video and all associated files
-func (s *VideoService) DeleteVideo(id uint) error {
-	// Use the delete service if available for complete cleanup
-	if s.deleteService != nil {
-		ctx := context.Background()
-		if err := s.deleteService.DeleteVideoCompletely(ctx, id); err != nil {
-			s.logger.Errorw("Failed to delete video completely", "error", err, "videoID", id)
-			return err
-		}
-		return nil
-	}
 
-	// Fallback to database-only deletion if Azure client unavailable
-	s.logger.Warnw("Azure client not available - performing database-only deletion", "videoID", id)
-	if err := s.db.Delete(&models.Video{}, id).Error; err != nil {
-		s.logger.Errorw("Failed to delete video from database", "error", err, "videoID", id)
-		return fmt.Errorf("failed to delete video: %w", err)
-	}
-	s.logger.Infow("Video deleted from database only", "videoID", id)
-	return nil
-}
 
 // ListVideos retrieves a paginated list of videos for a user
 func (s *VideoService) ListVideos(userID string, page, perPage int, includePrivate bool) (*models.VideoListResponse, error) {
