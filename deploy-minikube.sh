@@ -706,7 +706,11 @@ spec:
         - name: PORT
           value: "8080"
         - name: MINIO_ENDPOINT
-          value: "minio:9000"
+          value: "minio" 
+        - name: MINIO_PORT
+          value: "9000"
+        - name: MINIO_USE_SSL
+          value: "false"
         - name: MINIO_ACCESS_KEY
           valueFrom:
             secretKeyRef:
@@ -794,7 +798,11 @@ spec:
         - name: CACHE_TTL
           value: "3600"
         - name: MINIO_ENDPOINT
-          value: "minio:9000"
+          value: "minio" 
+        - name: MINIO_PORT
+          value: "9000"
+        - name: MINIO_USE_SSL
+          value: "false"
         - name: MINIO_ACCESS_KEY
           valueFrom:
             secretKeyRef:

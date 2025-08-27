@@ -29,19 +29,19 @@ type S3Client struct {
 	client     *s3.Client
 	uploader   *manager.Uploader
 	downloader *manager.Downloader
-	bucket     string
+	rawBucket       string // Bucket for downloads (original videos)
+	processedBucket string // Bucket for uploads (HLS, thumbnails)
 }
 
 func NewS3ClientFromEnv(ctx context.Context) (*S3Client, error) {
-	bucket := getSecret("/mnt/secrets-store/azure-storage-raw-container", "AZURE_BLOB_CONTAINER")
-	if bucket == "" {
-		bucket = getSecret("/mnt/secrets-store/minio-raw-bucket", "MINIO_RAW_BUCKET")
+	rawBucket := os.Getenv("MINIO_RAW_BUCKET")
+	if rawBucket == "" {
+		rawBucket = "raw-videos"
 	}
-	if bucket == "" {
-		bucket = os.Getenv("MINIO_RAW_BUCKET")
-	}
-	if bucket == "" {
-		bucket = "raw-videos"
+
+	processedBucket := os.Getenv("MINIO_PROCESSED_BUCKET")
+	if processedBucket == "" {
+		processedBucket = "processed-videos" // A sensible default
 	}
 
 	// Build custom AWS config if MINIO endpoint is provided
@@ -100,7 +100,7 @@ func NewS3ClientFromEnv(ctx context.Context) (*S3Client, error) {
 	uploader := manager.NewUploader(client)
 	downloader := manager.NewDownloader(client)
 
-	return &S3Client{client: client, uploader: uploader, downloader: downloader, bucket: bucket}, nil
+	return &S3Client{client: client, uploader: uploader, downloader: downloader, rawBucket: rawBucket, processedBucket: processedBucket}, nil
 }
 
 func (c *S3Client) DownloadTo(ctx context.Context, blobPath, localPath string) error {
@@ -112,7 +112,7 @@ func (c *S3Client) DownloadTo(ctx context.Context, blobPath, localPath string) e
 		return err
 	}
 	defer f.Close()
-	_, err = c.downloader.Download(ctx, f, &s3.GetObjectInput{Bucket: aws.String(c.bucket), Key: aws.String(blobPath)})
+	_, err = c.downloader.Download(ctx, f, &s3.GetObjectInput{Bucket: aws.String(c.rawBucket), Key: aws.String(blobPath)})
 	return err
 }
 
@@ -122,7 +122,7 @@ func (c *S3Client) UploadFile(ctx context.Context, localPath, blobPath string, c
 		return err
 	}
 	defer f.Close()
-	_, err = c.uploader.Upload(ctx, &s3.PutObjectInput{Bucket: aws.String(c.bucket), Key: aws.String(blobPath), Body: f, ContentType: aws.String(contentType)})
+	_, err = c.uploader.Upload(ctx, &s3.PutObjectInput{Bucket: aws.String(c.processedBucket), Key: aws.String(blobPath), Body: f, ContentType: aws.String(contentType)})
 	return err
 }
 
@@ -165,13 +165,13 @@ func detectContentType(path string) string {
 }
 
 func (c *S3Client) DeleteBlob(ctx context.Context, blobPath string) error {
-	_, err := c.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(c.bucket), Key: aws.String(blobPath)})
+	_, err := c.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(c.processedBucket), Key: aws.String(blobPath)})
 	return err
 }
 
 func (c *S3Client) DeleteBlobsWithPrefix(ctx context.Context, prefix string) error {
 	// List objects with prefix and delete them
-	paginator := s3.NewListObjectsV2Paginator(c.client, &s3.ListObjectsV2Input{Bucket: aws.String(c.bucket), Prefix: aws.String(prefix)})
+	paginator := s3.NewListObjectsV2Paginator(c.client, &s3.ListObjectsV2Input{Bucket: aws.String(c.processedBucket), Prefix: aws.String(prefix)})
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -189,7 +189,7 @@ func (c *S3Client) DeleteBlobsWithPrefix(ctx context.Context, prefix string) err
 }
 
 func (c *S3Client) BlobExists(ctx context.Context, blobPath string) (bool, error) {
-	_, err := c.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(c.bucket), Key: aws.String(blobPath)})
+	_, err := c.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(c.processedBucket), Key: aws.String(blobPath)})
 	if err != nil {
 		if strings.Contains(err.Error(), "NotFound") {
 			return false, nil
