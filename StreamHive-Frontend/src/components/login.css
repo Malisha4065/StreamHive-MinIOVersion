@@ -1,0 +1,165 @@
+/* Full-screen gradient background */
+body, html {
+  height: 100%;
+  margin: 0;
+  font-family: 'Arial', sans-serif;
+  background: linear-gradient(135deg, #1f2937, #4b5563);
+}
+
+/* Center container */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 20px;
+  /* Removed min-height: 100vh to avoid too tall container */
+  animation: fadeIn 1s ease;
+}
+
+/* Login card (compact glass effect) */
+.login-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  border-radius: 20px;
+  box-shadow: 0 10px 35px rgba(0,0,0,0.4);
+  width: 100%;
+  max-width: 360px;
+  padding: 20px 20px; /* Reduced padding */
+  text-align: center;
+  color: #fff;
+}
+
+/* Title and subtitle */
+.login-title {
+  font-size: 1.8rem;
+  margin-bottom: 6px;
+}
+
+.login-subtitle {
+  font-size: 0.9rem;
+  color: #d1d5db;
+  margin-bottom: 15px;
+}
+
+/* Form styles */
+.login-form label {
+  display: block;
+  margin-bottom: 12px; /* Reduced margin */
+  text-align: left;
+}
+
+.login-form label span {
+  display: block;
+  margin-bottom: 4px; /* Reduced margin */
+  font-size: 0.9rem;
+}
+
+.login-form input {
+  width: 100%;
+  padding: 10px 12px; /* Reduced padding */
+  border-radius: 12px; /* Slightly smaller */
+  border: 1px solid #ccc;
+  font-size: 0.95rem;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  transition: all 0.3s ease;
+}
+
+.login-form input::placeholder {
+  color: #ddd;
+}
+
+.login-form input:focus {
+  outline: none;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.7);
+  transform: scale(1.02);
+}
+
+/* Error message */
+.error-msg {
+  color: #f87171;
+  font-size: 0.85rem;
+  margin-bottom: 10px; /* Reduced margin */
+  animation: shake 0.3s;
+}
+
+/* Button (matched color) */
+.login-form button {
+  width: 100%;
+  padding: 11px;
+  border: none;
+  border-radius: 20px;
+  background: rgb(196, 165, 40);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 8px; /* Reduced margin */
+}
+
+.login-form button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 5px 15px rgba(196, 165, 40, 0.5);
+}
+
+.login-form button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Signup text */
+.signup-text {
+  margin-top: 12px; /* Reduced margin */
+  font-size: 0.88rem;
+  color: #d1d5db;
+}
+
+.signup-text a {
+  color: rgb(196, 165, 40);
+  text-decoration: none;
+}
+
+.signup-text a:hover {
+  text-decoration: underline;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  50% { transform: translateX(5px); }
+  75% { transform: translateX(-5px); }
+  100% { transform: translateX(0); }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .login-card {
+    padding: 15px 15px;
+    border-radius: 15px;
+  }
+
+  .login-title {
+    font-size: 1.5rem;
+  }
+
+  .login-form input {
+    font-size: 0.9rem;
+    padding: 9px 10px;
+  }
+
+  .login-form button {
+    font-size: 0.9rem;
+    padding: 9px;
+  }
+
+  .signup-text {
+    font-size: 0.85rem;
+  }
+}

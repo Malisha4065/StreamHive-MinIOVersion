@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  upload-service:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_PORT=${MINIO_PORT}
+      - MINIO_USE_SSL=${MINIO_USE_SSL}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_RAW_BUCKET=${MINIO_RAW_BUCKET}
+      - MINIO_PROCESSED_BUCKET=${MINIO_PROCESSED_BUCKET}
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672
+      - TRANSCODE_QUEUE=video_transcode_queue
+      - MAX_FILE_SIZE=1073741824
+      - ALLOWED_FORMATS=mp4,mov,avi,webm
+      - LOG_LEVEL=info
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./logs:/usr/src/app/logs
+    networks:
+      - streamhive
+
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - streamhive
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  streamhive:
+    driver: bridge

@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upload-service
+  labels:
+    app: upload-service
+    component: backend
+    service: streamhive
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: upload-service
+  template:
+    metadata:
+      labels:
+        app: upload-service
+    spec:
+      containers:
+      - name: upload-service
+        image: streamhive/upload-service:latest
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3001"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: streamhive-secrets
+              key: JWT_SECRET
+        - name: MINIO_ENDPOINT
+          value: "minio"
+        - name: MINIO_PORT
+          value: "9000"
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: streamhive-secrets
+              key: MINIO_ACCESS_KEY
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: streamhive-secrets
+              key: MINIO_SECRET_KEY
+        - name: MINIO_RAW_BUCKET
+          value: "raw-videos"
+        - name: MINIO_PROCESSED_BUCKET
+          value: "processed-videos"
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secrets
+              key: url
+        - name: TRANSCODE_QUEUE
+          value: "video_transcode_queue"
+        - name: MAX_FILE_SIZE
+          value: "1073741824"
+        - name: ALLOWED_FORMATS
+          value: "mp4,mov,avi,webm"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: logs
+          mountPath: /usr/src/app/logs
+      volumes:
+      - name: logs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: upload-service
+  labels:
+    app: upload-service
+spec:
+  selector:
+    app: upload-service
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3001
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: upload-service-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: upload-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

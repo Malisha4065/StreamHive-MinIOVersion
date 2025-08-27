@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transcoder
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: transcoder }
+  template:
+    metadata:
+      labels: { app: transcoder }
+    spec:
+      containers:
+        - name: transcoder
+          image: transcoder-service:local
+          imagePullPolicy: Never
+          env:
+            - name: AMQP_URL
+              valueFrom:
+                secretKeyRef: { name: video-catalog-secrets, key: AMQP_URL }
+            - name: AMQP_EXCHANGE
+              value: streamhive
+            - name: AMQP_UPLOAD_ROUTING_KEY
+              value: video.uploaded
+            - name: AMQP_TRANSCODED_ROUTING_KEY
+              value: video.transcoded
+            - name: AMQP_QUEUE
+              value: transcoder.video.uploaded
+            - name: MINIO_ENDPOINT
+              value: "minio"
+            - name: MINIO_PORT
+              value: "9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: streamhive-secrets, key: MINIO_ACCESS_KEY }
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: streamhive-secrets, key: MINIO_SECRET_KEY }
+            - name: MINIO_RAW_BUCKET
+              value: raw-videos
+            - name: MINIO_PROCESSED_BUCKET
+              value: processed-videos
+            - name: MINIO_PUBLIC_BASE
+              value: "http://minio:9000"
+            - name: CONCURRENCY
+              value: "1"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"

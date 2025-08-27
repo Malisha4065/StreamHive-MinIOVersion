@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: upload-service-config
+data:
+  max-file-size: "1073741824"
+  allowed-formats: "mp4,mov,avi,webm"
+  rate-limit-window: "900000"
+  rate-limit-max: "50"
+  upload-timeout: "300000"
+  log-level: "info"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: upload-service-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: upload-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+    ports:
+    - protocol: TCP
+      port: 3001
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: rabbitmq
+    ports:
+    - protocol: TCP
+      port: 5672
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS for Azure Blob Storage
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53

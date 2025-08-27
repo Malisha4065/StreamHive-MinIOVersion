@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base */
+html, body, #root { height: 100%; }
+body {
+  font-family: system-ui, sans-serif;
+  /* soft dark background with subtle color glows */
+  background:
+    radial-gradient(1000px 60% at 85% -10%, rgba(99,102,241,.18), transparent),
+    radial-gradient(900px 60% at -10% 30%, rgba(236,72,153,.18), transparent),
+    #0b1220;
+  color: #e5e7eb;
+}
+
+/* Reusable component classes */
+@layer components {
+  .app-wrap { @apply max-w-6xl mx-auto p-6; }
+  .surface  { @apply rounded-2xl bg-slate-900/70 backdrop-blur border border-white/10 shadow-xl; }
+  .card     { @apply surface p-5; }
+
+  .btn      { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 font-medium transition shadow-sm; }
+  .btn-primary { @apply btn bg-indigo-600 hover:bg-indigo-500 text-white; }
+  .btn-ghost   { @apply btn bg-white/5 hover:bg-white/10 text-slate-200; }
+  .btn-danger  { @apply btn bg-rose-600 hover:bg-rose-500 text-white; }
+  .btn-muted   { @apply btn bg-white/5 text-slate-300 cursor-not-allowed; }
+
+  .input    { @apply w-full rounded-xl bg-slate-800/60 border border-white/10 px-4 py-3 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+  .textarea { @apply input min-h-[110px]; }
+  .check    { @apply h-4 w-4 rounded border-white/20 bg-slate-800/60; }
+
+  .badge         { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border; }
+  .badge-success { @apply badge bg-green-600/15 text-green-300 border-green-500/30; }
+  .badge-warn    { @apply badge bg-amber-600/15 text-amber-300 border-amber-500/30; }
+  .badge-muted   { @apply badge bg-slate-700/50 text-slate-300 border-white/10; }
+
+  .hr-glow { @apply h-px w-full bg-gradient-to-r from-transparent via-white/20 to-transparent; }
+  .title-gradient { background: linear-gradient(90deg,#a78bfa,#f472b6,#f59e0b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+}
