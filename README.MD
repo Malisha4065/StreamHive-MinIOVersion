@@ -11,7 +11,7 @@ Steps(Linux):
 
 1. Start Minikube using:
 
-start minikube
+minikube start
 
 2. Build docker images in the minikube environment:
 
